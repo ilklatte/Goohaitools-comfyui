@@ -21,6 +21,22 @@ try:
 except Exception:
     model_management = None
 
+# TensorFlow can expose cuBLAS proxy symbols globally. Resolve the llama.cpp
+# CUDA backend against its own dependencies to avoid binding to those proxies.
+_cuda_backend_handle = None
+if sys.platform.startswith("linux"):
+    try:
+        import ctypes
+        spec = importlib.util.find_spec("llama_cpp")
+        if spec and spec.submodule_search_locations:
+            backend = Path(next(iter(spec.submodule_search_locations))) / "lib" / "libggml-cuda.so"
+            if backend.is_file():
+                _cuda_backend_handle = ctypes.CDLL(
+                    str(backend), mode=os.RTLD_NOW | os.RTLD_GLOBAL | os.RTLD_DEEPBIND
+                )
+    except (OSError, ImportError, AttributeError) as exc:
+        print(f"[Goohai Qwen] CUDA backend preload skipped: {exc}")
+
 try:
     from llama_cpp.llama import StoppingCriteria, StoppingCriteriaList
 except Exception:
